@@ -26,6 +26,7 @@ import static org.jboss.as.ejb3.tx.util.StatusHelper.statusAsString;
 import java.lang.reflect.Method;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.rmi.RemoteException;
+import javax.ejb.ConcurrentAccessTimeoutException;
 import javax.ejb.EJBException;
 import javax.ejb.EJBTransactionRolledbackException;
 import javax.ejb.NoSuchEJBException;
@@ -38,6 +39,7 @@ import javax.transaction.Status;
 import javax.transaction.SystemException;
 import javax.transaction.Transaction;
 
+import org.infinispan.util.concurrent.TimeoutException;
 import org.jboss.as.ee.component.Component;
 import org.jboss.as.ee.component.ComponentView;
 import org.jboss.as.ejb3.component.EJBComponent;
@@ -201,6 +203,11 @@ public class CMTTxInterceptor implements Interceptor {
             final EJBTransactionRolledbackException e2 = EjbLogger.ROOT_LOGGER.unexpectedErrorRolledBack(e);
             setRollbackOnly(tx, e2);
             throw e2;
+        } catch (TimeoutException e) {
+            final ConcurrentAccessTimeoutException concurrentAccessTimeoutException = new ConcurrentAccessTimeoutException();
+            concurrentAccessTimeoutException.initCause(e);
+            setRollbackOnly(tx, concurrentAccessTimeoutException);
+            throw concurrentAccessTimeoutException;
         } catch (Exception e) {
             ApplicationExceptionDetails ae = component.getApplicationException(e.getClass(), invocation.getMethod());
 
@@ -232,6 +239,10 @@ public class CMTTxInterceptor implements Interceptor {
             throw EjbLogger.ROOT_LOGGER.unexpectedError(e);
         } catch (EJBException e) {
             throw e;
+        } catch (TimeoutException e) {
+            final ConcurrentAccessTimeoutException concurrentAccessTimeoutException = new ConcurrentAccessTimeoutException();
+            concurrentAccessTimeoutException.initCause(e);
+            throw concurrentAccessTimeoutException;
         } catch (RuntimeException e) {
             ApplicationExceptionDetails ae = component.getApplicationException(e.getClass(), invocation.getMethod());
             throw ae != null ? e : new EJBException(e);
@@ -257,6 +268,10 @@ public class CMTTxInterceptor implements Interceptor {
                     throw t;
                 } catch (EJBException | RemoteException e) {
                     throw e;
+                } catch (TimeoutException e) {
+                    final ConcurrentAccessTimeoutException concurrentAccessTimeoutException = new ConcurrentAccessTimeoutException();
+                    concurrentAccessTimeoutException.initCause(e);
+                    throw concurrentAccessTimeoutException;
                 } catch (RuntimeException e) {
                     if (ae != null && !ae.isRollback()) {
                         except = e;
